@@ -50,9 +50,13 @@ def loadData(location):
             try:
                 game.root.properties["RE"]
             except KeyError:
-                print("Can't find result for %s " %replay)
+                print("Can't find result for %s " % replay)
                 continue
             sim.reset(game.root)
+            if game.rest is None:
+                print("Replay has no moves: %s" % replay)
+                continue
+
             for move in game.rest:
                 try:
                     stone_position = move.properties["B"][0]
