@@ -152,7 +152,7 @@ class SupervisedGoBatches(Sequence):
     def reset_generator(self):
         self.step_size = np.random.random_integers(0,self.modulus)
         self.start = np.random.random_integers(0,self.modulus)
-        self.batch_indexes = list()
+        self.batch_indexes = [self.start]
 
 if __name__ == "__main__":
     all_data_path = "replays/all_replays/*.sgf"
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     validation_path = "replays/validation_set/*.sgf"
     test_path = "replays/test_set/*.sgf"
 
-    generate_split(all_data_path,test_percent=0.03,validation_percent=0.01)
+    generate_split(all_data_path,test_percent=0.01,validation_percent=0.005)
 
     training_data = loadData(training_path)
     validation_data = loadData(validation_path)
