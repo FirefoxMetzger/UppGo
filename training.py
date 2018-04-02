@@ -21,7 +21,7 @@ def moves_top10(y_true,y_pred):
 model.compile(
     adam(),
     loss=loss_function,
-    loss_weights={"policy":1,"value":0.001},
+    loss_weights={"policy":1,"value":0.01},
     metrics={
         "policy":[moves_predicted, moves_top10],
         "value":[]
@@ -29,22 +29,27 @@ model.compile(
 )
 
 print("--- Loading Training Data ---")
-training_data_files = "replays/training_set/*.sgf"
-training_data = loadData(training_data_files)
-feeder = SupervisedGoBatches(training_data, 512)
+data_files = "replays/training_set/*.sgf"
+data = loadData(data_files)
+training_feeder = SupervisedGoBatches(data, 256)
+
+print("--- Loading Validation Data ---")
+data_files = "replays/validation_set/*.sgf"
+data = loadData(data_files)
+validation_feeder = SupervisedGoBatches(data, 512)
 
 print("--- Loading Test Data ---")
-
-test_data_files = "replays/training_set/*.sgf"
-test = loadData(test_data_files)
-test_feeder = SupervisedGoBatches(test, 512)
+data_files = "replays/test_set/*.sgf"
+data = loadData(data_files)
+test_feeder = SupervisedGoBatches(data, 512)
 
 print("--- Starting to fit the model ---")
 
 model.fit_generator(
-    feeder,
-    steps_per_epoch=3,
-    epochs=2,
+    training_feeder,
+    steps_per_epoch=50,
+    epochs=10,
+    validation_data=validation_feeder,
     callbacks=[
         logger,
         ModelCheckpoint("./models/keras_model_ep_{epoch:02d}-{loss:.2f}.hdf5")
