@@ -14,9 +14,6 @@ from keras.regularizers import l2
 # regularization is c = 0.0001
 tower = Sequential()
 tower.add(Conv(input_shape=(19,19,17)))
-tower.add(BatchNormalization(axis=3, scale=False))
-tower.add(Activation("relu"))
-#tower.add(Residual(256))
 # 19 residual blocks until the policy head
 # my little 650 Ti can't fit 19 layers into memory I will reduce this for testing :(
 tower.add(ResidualTower(256, 1)) # set this to 19 on TITAN V
