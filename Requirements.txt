@@ -3,3 +3,4 @@ tensorflow==1.7.0
 sgf==0.5
 glob
 gymgym==0.9.4
+h5py==2.7.1
