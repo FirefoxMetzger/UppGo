@@ -1,0 +1,10 @@
+version: "2"
+services:
+  trainer:
+    image: firefoxmetzger/uppgo:test
+    volumes:
+      - /home/sebastian/UppGo-meta/data:/UppGo/replays
+      - /home/sebastian/UppGo-meta/logs:/UppGo/logs
+      - /home/sebastian/UppGo-meta/models:/UppGo/models
+    build:
+      context: /home/sebastian/Desktop/UppGoZero
