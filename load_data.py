@@ -2,14 +2,45 @@ import sgf
 import glob
 import numpy as np
 from go import Go
+from shutil import copy
 
 from keras.utils import Sequence
 
-def loadTrainingData(location):
+def calculate_split_data(data, test_percent, validation_percent):
+    training_percent = 1-test_percent-validation_percent
+    total_games = len(data)
+
+    num_validation = int(np.ceil(total_games * validation_percent))
+    num_test = int(np.ceil(total_games * test_percent))
+    num_training = total_games - num_validation - num_test
+
+    order = np.random.permutation(total_games)
+    training_games = order[:num_training]
+    validation_games = order[num_training:num_training+num_validation]
+    test_games = order[num_training+num_validation:]
+
+    training = [data[i] for i in training_games]
+    validation = [data[i] for i in validation_games]
+    test = [data[i] for i in test_games]
+
+    return training, validation, test
+
+def generate_split(location, test_percent=0.05, validation_percent=0.05):
+    replays = glob.glob(location)
+    training, validation, test = calculate_split_data(replays, test_percent, validation_percent)
+
+    for replay in training:
+            copy(replay, "replays/training_set/")
+    for replay in validation:
+            copy(replay, "replays/validation_set/")
+    for replay in test:
+            copy(replay, "replays/test_set/")
+
+def loadData(location):
     replays = glob.glob(location)
     positions = "abcdefghijklmnopqrs"
 
-    training_games = list()
+    game_data = list()
     for replay in replays:
         with open(replay, "r") as f:
             collection = sgf.parse(f.read())
@@ -37,8 +68,8 @@ def loadTrainingData(location):
                 
                 sim.step(action)
 
-            training_games.append(sim)
-    return training_games
+            game_data.append(sim)
+    return game_data
 
 class SupervisedGoBatches(Sequence):
     def __init__(self, initial_games, batch_size):
@@ -68,7 +99,7 @@ class SupervisedGoBatches(Sequence):
         
     def __getitem__(self, batch_idx):
         if batch_idx > len(self):
-            raise IndexError("%i is out of bounds for %i training batches" % (batch_idx, len(self)))
+            raise IndexError("%i is out of bounds for %i batches" % (batch_idx, len(self)))
 
         states = np.zeros((self.batch_size,19,19,17))
         actions = np.zeros(self.batch_size, dtype=int)
@@ -124,14 +155,22 @@ class SupervisedGoBatches(Sequence):
         self.batch_indexes = list()
 
 if __name__ == "__main__":
-    path = "replays/training_set/*.sgf"
+    all_data_path = "replays/all_replays/*.sgf"
+    training_path = "replays/training_set/*.sgf"
+    validation_path = "replays/validation_set/*.sgf"
+    test_path = "replays/test_set/*.sgf"
 
-    training_data = loadTrainingData(path)
+    generate_split(all_data_path,test_percent=0.03,validation_percent=0.01)
 
-    generator = SupervisedGoBatches(training_data, 32)
+    training_data = loadData(training_path)
+    validation_data = loadData(validation_path)
+    test_data = loadData(test_path)
+
+    generator = SupervisedGoBatches(training_data, 512)
     print("There are %d training batches" % len(generator))
-    for idx, batch in enumerate(generator):
-        states, labels = batch
-        #print(states.shape, labels["policy"].shape, labels["value"].shape)
-        if idx % 5000 == 0:
-            print("Iterated through %d batches." % idx)
+
+    generator = SupervisedGoBatches(validation_data, 512)
+    print("There are %d validation batches" % len(generator))
+    
+    generator = SupervisedGoBatches(test_data, 512)
+    print("There are %d test batches" % len(generator))
