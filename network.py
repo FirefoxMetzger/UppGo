@@ -16,7 +16,7 @@ tower = Sequential()
 tower.add(Conv(input_shape=(19,19,17)))
 # 19 residual blocks until the policy head
 # my little 650 Ti can't fit 19 layers into memory I will reduce this for testing :(
-tower.add(ResidualTower(256, 5)) # set this to 19 on TITAN V
+tower.add(ResidualTower(256, 10)) # set this to 19 on TITAN V
 tower.add(Activation("linear", trainable=False, name="head"))
 residual_head = tower.get_layer(name="head").output
 
