@@ -57,19 +57,21 @@ class Go(gym.Env):
         white_board_state = self.white_history[-1].copy()
         black_board_state = self.black_history[-1].copy()
 
-        self.move_history.append(action)
+        if not action == 361: # 361 is the pass action
+            (y,x) = np.unravel_index(action, (19,19))
+            if white_board_state[x,y] or black_board_state[x,y]:
+                raise Exception("Can't move on top of another stone")
 
-        if action == 361:
-            pass # action
-        else:   
-            action = np.unravel_index(action, (19,19))
             if self.turn == "white":
-                white_board_state[action] = 1.0
+                white_board_state[y,x] = 1.0
                 self.turn = "black"
             else: 
-                black_board_state[action] = 1.0
+                black_board_state[y,x] = 1.0
                 self.turn = "white"
 
+            
+
+        self.move_history.append(action)
         self.white_history.append(white_board_state)
         self.black_history.append(black_board_state)
         
@@ -230,3 +232,66 @@ class Go(gym.Env):
         action = self.move_history[idx]
 
         return state, action, reward
+
+    def capture_pieces(self, black_board, white_board):
+        """Remove all pieces from the board that have 
+        no liberties.
+        """
+
+        has_stone = np.logical_or(black_board,white_board).flatten()
+        white_liberties = np.zeros(range(19*19))
+        black_liberties = np.zeros(range(19*19))
+
+        search_index = 0
+        liberties_end = 0
+        indexes = np.array(range(19*19))
+
+        while search_index < 19*19:
+            idx = indexes[search_index]
+            x, y = np.unravel_index(idx,(19,19))
+            new_liberty = False
+
+            if not has_stone[search_index]:
+                # empty field -- is liberty for both
+                white_liberties[idx] = 1.0
+                black_liberties[idx] = 1.0
+                new_liberty = True
+            elif black_board[y,x] and self.has_liberty(idx, has_stone, black_liberties):
+                black_liberties[idx] = 1.0
+                new_liberty = True
+            if white_board[y,x] and self.has_liberty(idx,has_stone,white_liberties):
+                white_liberties[idx] = 1.0
+                new_liberty = True
+            
+            if new_liberty:
+                indexes[liberties_end], indexes[search_index] = indexes[search_index], indexes[liberties_end]
+                liberties_end += 1
+                search_index = liberties_end
+            else:
+                search_index += 1
+
+    def has_liberty(self,idx, has_stone, known_liberties):
+        """Checks the local surrounding for liberties.
+        If False, it means we can't tell from the current local surounding if
+        the stone has a liberty or not
+        """
+        (y,x) = np.unravel_index(idx,(19,19))
+        local_area = [
+            (min(x+1,18),y),
+            (max(x-1,0),y),
+            (x,min(y+1,18)),
+            (x,max(y-1,0))
+        ]
+        local_area = np.ravel_multi_index(local_area,(19,19))
+
+        local_area_free = list() # adjacent empty field
+        liberty = list() # adjacent stone that is known to have liberties
+
+        for elem in local_area:
+            local_area_free.append(has_stone[elem])
+            liberty.append(known_liberties[elem])
+        
+        if any(local_area_free) or any(liberty):
+            return True
+
+        return False
