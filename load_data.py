@@ -71,7 +71,7 @@ def loadData(location):
                     action = np.ravel_multi_index((y,x),(19,19))
                 
                 sim.step(action)
-
+            print('finished loading a game')
             game_data.append(sim)
     return game_data
 
@@ -164,7 +164,7 @@ if __name__ == "__main__":
     validation_path = "replays/validation_set/*.sgf"
     test_path = "replays/test_set/*.sgf"
 
-    generate_split(all_data_path,test_percent=0.01,validation_percent=0.005)
+    # generate_split(all_data_path,test_percent=0.01,validation_percent=0.005)
 
     training_data = loadData(training_path)
     validation_data = loadData(validation_path)

@@ -37,11 +37,8 @@ class Go(gym.Env):
     arbitrary behind-the-scenes dynamics. An environment can be
     partially or fully observed.
     The main API methods that users of this class need to know are:
-        step
-        reset
         render
         close
-        seed
     And set the following attributes:
         action_space: The Space object corresponding to valid actions
         observation_space: The Space object corresponding to valid observations
@@ -68,7 +65,7 @@ class Go(gym.Env):
     def step(self, action):
         """ Place a stone on the board in the color of the current player.
         Args:
-            action (object): a 2-tupel of integers in range [0,18]
+            action (object): raveled index of the board position [19,19] or 361 for pass
         Returns:
             observation (object): agent's observation of the current environment
             reward (float) : amount of reward returned after previous action
@@ -82,6 +79,8 @@ class Go(gym.Env):
         if not action == 361: # 361 is the pass action
             (y,x) = np.unravel_index(action, (19,19))
             if white_board_state[x,y] or black_board_state[x,y]:
+                self.render()
+                print("Desired Move: (%d,%d)" % (y,x))
                 raise Exception("Can't move on top of another stone")
 
             if self.turn == "white":
@@ -146,11 +145,8 @@ class Go(gym.Env):
 
     def render(self, mode='human'):
         """Renders the environment.
-        The set of supported modes varies per environment. (And some
-        environments do not support rendering at all.) By convention,
-        if mode is:
-        - human: render to the current display or terminal and
-          return nothing. Usually for human consumption.
+        Supported Modes:
+        - human: Print the current board state in the current terminal
         - rgb_array: Return an numpy.ndarray with shape (x, y, 3),
           representing RGB values for an x-by-y pixel image, suitable
           for turning into a video.
@@ -175,7 +171,23 @@ class Go(gym.Env):
                 else:
                     super(MyEnv, self).render(mode=mode) # just raise an exception
         """
-        raise NotImplementedError
+
+        if mode == "human":
+            white_board = self.white_history[-1]
+            black_board = self.black_history[-1]
+
+            for y in range(black_board.shape[0]):
+                row = ""
+                for x in range(black_board.shape[1]):
+                    if white_board[x,y]:
+                        row += "W"
+                    elif black_board[y,x]:
+                        row += "B"
+                    else:
+                        row +="-"
+                print(row)
+        else:
+            raise NotImplementedError
 
     def close(self):
         """Override _close in your subclass to perform any necessary cleanup.
@@ -185,34 +197,8 @@ class Go(gym.Env):
         return
 
     def seed(self, seed=None):
-        """Sets the seed for this env's random number generator(s).
-        Note:
-            Some environments use multiple pseudorandom number generators.
-            We want to capture all such seeds used in order to ensure that
-            there aren't accidental correlations between multiple generators.
-        Returns:
-            list<bigint>: Returns the list of seeds used in this env's random
-              number generators. The first value in the list should be the
-              "main" seed, or the value which a reproducer should pass to
-              'seed'. Often, the main seed equals the provided 'seed', but
-              this won't be true if seed=None, for example.
-        """
-        logger.warn("Could not seed environment %s", self)
+        # this is a deterministic environment
         return
-
-    @property
-    def unwrapped(self):
-        """Completely unwrap this env.
-        Returns:
-            gym.Env: The base non-wrapped gym.Env instance
-        """
-        return self
-
-    def __str__(self):
-        if self.spec is None:
-            return '<{} instance>'.format(type(self).__name__)
-        else:
-            return '<{}<{}>>'.format(type(self).__name__, self.spec.id)
 
     def get_state(self):
         turn = self.turn
