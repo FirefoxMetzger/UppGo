@@ -54,7 +54,7 @@ class Go(gym.Env):
 
 
     # Set this in SOME subclasses
-    metadata = {'render.modes': []}
+    metadata = {'render.modes': ["human"]}
     reward_range = (-1, 1)
     spec = None
 
@@ -78,7 +78,7 @@ class Go(gym.Env):
 
         if not action == 361: # 361 is the pass action
             (y,x) = np.unravel_index(action, (19,19))
-            if white_board_state[x,y] or black_board_state[x,y]:
+            if white_board_state[y,x] or black_board_state[y,x]:
                 self.render()
                 print("Desired Move: (%d,%d)" % (y,x))
                 raise Exception("Can't move on top of another stone")
