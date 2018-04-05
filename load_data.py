@@ -71,7 +71,6 @@ def loadData(location):
                     action = np.ravel_multi_index((y,x),(19,19))
                 
                 sim.step(action)
-            print('finished loading a game')
             game_data.append(sim)
     return game_data
 
@@ -158,7 +157,7 @@ class SupervisedGoBatches(Sequence):
         self.start = np.random.random_integers(0,self.modulus)
         self.batch_indexes = [self.start]
 
-if __name__ == "__main__":
+def main():
     all_data_path = "replays/all_replays/*.sgf"
     training_path = "replays/training_set/*.sgf"
     validation_path = "replays/validation_set/*.sgf"
@@ -178,3 +177,6 @@ if __name__ == "__main__":
     
     generator = SupervisedGoBatches(test_data, 512)
     print("There are %d test batches" % len(generator))
+
+if __name__ == "__main__":
+    main()
