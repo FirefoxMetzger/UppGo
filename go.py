@@ -4,6 +4,46 @@ import numpy as np
 # game gives reward of -1 or +1
 # ends when both players pass their turn, after a number of times or player resigns
 
+def get_neighboors(y,x,board_shape):
+    neighboors = list()
+
+    if y > 0:
+        neighboors.append((y-1,x))
+    if y < board_shape[0] - 1:
+        neighboors.append((y+1,x))
+    if x > 0:
+        neighboors.append((y,x-1))
+    if x < board_shape[1] - 1:
+        neighboors.append((y,x+1))
+
+    return neighboors
+
+def test_group(board,opponent_board,y,x, current_group):
+    """ Assume the current group is captured. Find it via flood fill
+    and if an empty neighboor is encountered, break (group is alive).
+
+    board - 19x19 array of player's stones
+    opponent_board - 19x19 array of opponent's stones
+    x,y - position to test
+    current_group - tested stones in player's color
+
+    """
+
+    pos = (y,x)
+
+    if board[pos] and not current_group[pos]:
+        has_liberties = False
+        current_group[pos] = 1.0
+
+        neighboors = get_neighboors(y,x,board.shape)
+
+        for yn, xn in neighboors:
+            has_liberties = test_group(board,opponent_board,yn,xn,current_group)
+            if has_liberties:
+                return True
+        return False
+    return not opponent_board[pos]
+
 def floodfill(liberties,y,x):
     """
     flood fill a region that is now known to have liberties. 1.0 signals a liberty, 0.0 signals
@@ -13,7 +53,7 @@ def floodfill(liberties,y,x):
     """
     
     #"hidden" stop clause - not reinvoking for "liberty" or "non-liberty", only for "unknown".
-    if liberties[y][x] == 0.0:  
+    if liberties[y][x]:
         liberties[y][x] = 1.0 
         if y > 0:
             floodfill(liberties,y-1,x)
@@ -80,17 +120,19 @@ class Go(gym.Env):
             (y,x) = np.unravel_index(action, (19,19))
             if white_board_state[y,x] or black_board_state[y,x]:
                 self.render()
-                print("Desired Move: (%d,%d)" % (y,x))
+                print("Desired Move: %s: (%d,%d)" % (self.turn, y,x))
                 raise Exception("Can't move on top of another stone")
 
             if self.turn == "white":
                 white_board_state[y,x] = 1.0
+                self.fast_capture_pieces(black_board_state, white_board_state, self.turn, y,x)
                 self.turn = "black"
             else: 
                 black_board_state[y,x] = 1.0
+                self.fast_capture_pieces(black_board_state, white_board_state, self.turn, y,x)
                 self.turn = "white"
 
-        self.capture_pieces(black_board_state,white_board_state)
+        #self.capture_pieces(black_board_state,white_board_state)
 
         self.move_history.append(action)
         self.white_history.append(white_board_state)
@@ -177,9 +219,12 @@ class Go(gym.Env):
             black_board = self.black_history[-1]
 
             for y in range(black_board.shape[0]):
-                row = ""
+                if y < 10:
+                    row = "0"+str(y)
+                else:
+                    row = str(y)
                 for x in range(black_board.shape[1]):
-                    if white_board[x,y]:
+                    if white_board[y,x]:
                         row += "W"
                     elif black_board[y,x]:
                         row += "B"
@@ -240,6 +285,52 @@ class Go(gym.Env):
         action = self.move_history[idx]
 
         return state, action, reward
+
+    def fast_capture_pieces(self, black_board, white_board, active_player, y,x):
+        """Remove all pieces from the board that have 
+        no liberties. This function modifies the input variables in place.
+
+        black_board is a 19x19 np.array with value 1.0 if a black stone is
+        present and 0.0 otherwise.
+
+        white_board is a 19x19 np.array similar to black_board.
+
+        active_player - the player that made a move
+        (x,y) - position of the move
+
+        """
+
+        # only test neighboors of current move (other's will have unchanged
+        # liberties)
+        neighboors = get_neighboors(y,x,black_board.shape)
+
+        if active_player == "white":
+            board = white_board
+            opponent_board = black_board
+        else:
+            board = black_board
+            opponent_board = white_board
+
+        # to test suicidal moves
+        original_pos = (y,x)
+
+        # only test adjacent stones in opponent's color
+        for pos in neighboors:
+            if not opponent_board[pos]:
+                continue
+
+            current_group = np.zeros_like(board)
+            has_liberties = test_group(opponent_board, board, *pos, current_group)
+
+            if not has_liberties:
+                opponent_board[current_group] = 0.0
+
+        current_group = np.zeros_like(board)
+        has_liberties = test_group(board, opponent_board, *original_pos, current_group)
+        if not has_liberties:
+            # actually my replays are not played with Japanese or Chinese rules
+            board[current_group] = 0.0
+            #raise Exception("Suicidal moves are illegal in Japanese and Chinese rules!")
 
     def capture_pieces(self, black_board, white_board):
         """Remove all pieces from the board that have 
