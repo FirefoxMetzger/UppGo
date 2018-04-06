@@ -258,7 +258,7 @@ if __name__ == "__main__":
     print("Fast capture %d runs: %.2f" % (runs, fast))
     slow = timeit.timeit(test2, number=runs)
     print("Slow capture %d runs: %.2f" % (runs, slow))
-    print("Relative gain: %.2f" % slow/fast)
+    print("Relative gain: %.2f" % (slow/fast))
 
     for reply1, reply2  in zip(parse(replay),parse2(replay)):
         fast_black, fast_white, fast_move = reply1
