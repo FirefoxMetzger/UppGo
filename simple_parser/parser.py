@@ -255,8 +255,8 @@ if __name__ == "__main__":
     replay = "2018-01-01-6.sgf"
     runs = 1000
     fast = timeit.timeit(test1, number=runs)
-    slow = timeit.timeit(test2, number=runs)
     print("Fast capture %d runs: %.2f" % (runs, fast))
+    slow = timeit.timeit(test2, number=runs)
     print("Slow capture %d runs: %.2f" % (runs, slow))
     print("Relative gain: %.2f" % slow/fast)
 
