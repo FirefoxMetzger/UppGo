@@ -44,28 +44,6 @@ def test_group(board,opponent_board,y,x, current_group):
         return False
     return not opponent_board[pos]
 
-def floodfill(liberties,y,x):
-    """
-    flood fill a region that is now known to have liberties. 1.0 signals a liberty, 0.0 signals
-    undecided and -1.0 a known non-liberty (black stone)
-
-    liberties is an np.array of currently known liberties and non-liberties
-    """
-    
-    #"hidden" stop clause - not reinvoking for "liberty" or "non-liberty", only for "unknown".
-    if liberties[y][x]:
-        liberties[y][x] = 1.0 
-        if y > 0:
-            floodfill(liberties,y-1,x)
-        if y < liberties.shape[0] - 1:
-            floodfill(liberties,y+1,x)
-        if x > 0:
-            floodfill(liberties,y,x-1)
-        if x < liberties.shape[1] - 1:
-            floodfill(liberties,y,x+1)
-
-
-
 class Go(gym.Env):
     """A simple Go environment that takes moves for each player in alternating order.
     - There is no komi
@@ -125,11 +103,11 @@ class Go(gym.Env):
 
             if self.turn == "white":
                 white_board_state[y,x] = 1.0
-                self.fast_capture_pieces(black_board_state, white_board_state, self.turn, y,x)
+                self.capture_pieces(black_board_state, white_board_state, y,x)
                 self.turn = "black"
             else: 
                 black_board_state[y,x] = 1.0
-                self.fast_capture_pieces(black_board_state, white_board_state, self.turn, y,x)
+                self.capture_pieces(black_board_state, white_board_state, y,x)
                 self.turn = "white"
 
         #self.capture_pieces(black_board_state,white_board_state)
@@ -286,7 +264,7 @@ class Go(gym.Env):
 
         return state, action, reward
 
-    def fast_capture_pieces(self, black_board, white_board, active_player, y,x):
+    def capture_pieces(self, black_board, white_board, y,x):
         """Remove all pieces from the board that have 
         no liberties. This function modifies the input variables in place.
 
@@ -304,7 +282,7 @@ class Go(gym.Env):
         # liberties)
         neighboors = get_neighboors(y,x,black_board.shape)
 
-        if active_player == "white":
+        if self.turn == "white":
             board = white_board
             opponent_board = black_board
         else:
@@ -328,37 +306,6 @@ class Go(gym.Env):
         current_group = np.zeros_like(board)
         has_liberties = test_group(board, opponent_board, *original_pos, current_group)
         if not has_liberties:
-            # actually my replays are not played with Japanese or Chinese rules
+            # actually my replays are not only played with Japanese or Chinese rules
             board[current_group] = 0.0
             #raise Exception("Suicidal moves are illegal in Japanese and Chinese rules!")
-
-    def capture_pieces(self, black_board, white_board):
-        """Remove all pieces from the board that have 
-        no liberties. This function modifies the input variables in place.
-
-        black_board is a 19x19 np.array with value 1.0 if a black stone is
-        present and 0.0 otherwise.
-
-        white_board is a 19x19 np.array similar to black_board.
-
-        """
-
-        has_stone = np.logical_or(black_board,white_board)
-        white_liberties = np.zeros((19,19))
-        black_liberties = np.zeros((19,19))
-
-        # stones in opposite color have no liberties
-        white_liberties[black_board] = -1.0
-        black_liberties[white_board] = -1.0
-
-        for y in range(has_stone.shape[0]):
-            for x in range(has_stone.shape[1]):
-                if not has_stone[y,x]:
-                    floodfill(white_board,y,x)
-                    floodfill(black_board,y,x)
-
-        white_liberties[white_liberties == 0.0] = -1.0
-        black_liberties[black_liberties == 0.0] = -1.0
-
-        white_board[white_liberties == -1.0] = 0.0
-        black_board[black_liberties == -1.0] = 0.0
