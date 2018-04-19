@@ -1,4 +1,5 @@
 import gym
+from gym.spaces import Discrete, Tuple
 import numpy as np
 
 # game gives reward of -1 or +1
@@ -40,13 +41,13 @@ class Go(gym.Env):
     spec = None
 
     # Set these in ALL subclasses
-    action_space = None
+    action_space = Discrete(361)
     observation_space = None
 
     def step(self, action):
         """ Place a stone on the board in the color of the current player.
         Args:
-            action (object): a 2-tupel of integers in range [0,18]
+            action (object): the raveled index of the stone's position or 361 for pass
         Returns:
             observation (object): agent's observation of the current environment
             reward (float) : amount of reward returned after previous action
