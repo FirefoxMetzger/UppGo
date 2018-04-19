@@ -4,3 +4,6 @@
 *.zip
 **/replays
 /models/
+*.prof
+*.lprof
+*.sgf

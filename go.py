@@ -5,6 +5,46 @@ import numpy as np
 # game gives reward of -1 or +1
 # ends when both players pass their turn, after a number of times or player resigns
 
+def get_neighboors(y,x,board_shape):
+    neighboors = list()
+
+    if y > 0:
+        neighboors.append((y-1,x))
+    if y < board_shape[0] - 1:
+        neighboors.append((y+1,x))
+    if x > 0:
+        neighboors.append((y,x-1))
+    if x < board_shape[1] - 1:
+        neighboors.append((y,x+1))
+
+    return neighboors
+
+def test_group(board,opponent_board,y,x, current_group):
+    """ Assume the current group is captured. Find it via flood fill
+    and if an empty neighboor is encountered, break (group is alive).
+
+    board - 19x19 array of player's stones
+    opponent_board - 19x19 array of opponent's stones
+    x,y - position to test
+    current_group - tested stones in player's color
+
+    """
+
+    pos = (y,x)
+
+    if board[pos] and not current_group[pos]:
+        has_liberties = False
+        current_group[pos] = 1.0
+
+        neighboors = get_neighboors(y,x,board.shape)
+
+        for yn, xn in neighboors:
+            has_liberties = test_group(board,opponent_board,yn,xn,current_group)
+            if has_liberties:
+                return True
+        return False
+    return not opponent_board[pos]
+
 class Go(gym.Env):
     """A simple Go environment that takes moves for each player in alternating order.
     - There is no komi
@@ -16,11 +56,8 @@ class Go(gym.Env):
     arbitrary behind-the-scenes dynamics. An environment can be
     partially or fully observed.
     The main API methods that users of this class need to know are:
-        step
-        reset
         render
         close
-        seed
     And set the following attributes:
         action_space: The Space object corresponding to valid actions
         observation_space: The Space object corresponding to valid observations
@@ -36,7 +73,7 @@ class Go(gym.Env):
 
 
     # Set this in SOME subclasses
-    metadata = {'render.modes': []}
+    metadata = {'render.modes': ["human"]}
     reward_range = (-1, 1)
     spec = None
 
@@ -47,7 +84,7 @@ class Go(gym.Env):
     def step(self, action):
         """ Place a stone on the board in the color of the current player.
         Args:
-            action (object): the raveled index of the stone's position or 361 for pass
+            action (object): raveled index of the board position [19,19] or 361 for pass
         Returns:
             observation (object): agent's observation of the current environment
             reward (float) : amount of reward returned after previous action
@@ -58,19 +95,25 @@ class Go(gym.Env):
         white_board_state = self.white_history[-1].copy()
         black_board_state = self.black_history[-1].copy()
 
-        self.move_history.append(action)
+        if not action == 361: # 361 is the pass action
+            (y,x) = np.unravel_index(action, (19,19))
+            if white_board_state[y,x] or black_board_state[y,x]:
+                self.render()
+                print("Desired Move: %s: (%d,%d)" % (self.turn, y,x))
+                raise Exception("Can't move on top of another stone")
 
-        if action == 361:
-            pass # action
-        else:   
-            action = np.unravel_index(action, (19,19))
             if self.turn == "white":
-                white_board_state[action] = 1.0
+                white_board_state[y,x] = 1.0
+                self.capture_pieces(black_board_state, white_board_state, y,x)
                 self.turn = "black"
             else: 
-                black_board_state[action] = 1.0
+                black_board_state[y,x] = 1.0
+                self.capture_pieces(black_board_state, white_board_state, y,x)
                 self.turn = "white"
 
+        #self.capture_pieces(black_board_state,white_board_state)
+
+        self.move_history.append(action)
         self.white_history.append(white_board_state)
         self.black_history.append(black_board_state)
         
@@ -79,8 +122,8 @@ class Go(gym.Env):
         return observation, reward, False, None
 
     def reset(self, root=None):
-        white_board = np.zeros((19,19))
-        black_board = np.zeros((19,19))
+        white_board = np.zeros((19,19), dtype=bool)
+        black_board = np.zeros((19,19), dtype=bool)
         self.move_history = list()
 
         if not root: # reset in self-play mode -- unknown result
@@ -123,11 +166,8 @@ class Go(gym.Env):
 
     def render(self, mode='human'):
         """Renders the environment.
-        The set of supported modes varies per environment. (And some
-        environments do not support rendering at all.) By convention,
-        if mode is:
-        - human: render to the current display or terminal and
-          return nothing. Usually for human consumption.
+        Supported Modes:
+        - human: Print the current board state in the current terminal
         - rgb_array: Return an numpy.ndarray with shape (x, y, 3),
           representing RGB values for an x-by-y pixel image, suitable
           for turning into a video.
@@ -152,7 +192,26 @@ class Go(gym.Env):
                 else:
                     super(MyEnv, self).render(mode=mode) # just raise an exception
         """
-        raise NotImplementedError
+
+        if mode == "human":
+            white_board = self.white_history[-1]
+            black_board = self.black_history[-1]
+
+            for y in range(black_board.shape[0]):
+                if y < 10:
+                    row = "0"+str(y)
+                else:
+                    row = str(y)
+                for x in range(black_board.shape[1]):
+                    if white_board[y,x]:
+                        row += "W"
+                    elif black_board[y,x]:
+                        row += "B"
+                    else:
+                        row +="-"
+                print(row)
+        else:
+            raise NotImplementedError
 
     def close(self):
         """Override _close in your subclass to perform any necessary cleanup.
@@ -162,34 +221,8 @@ class Go(gym.Env):
         return
 
     def seed(self, seed=None):
-        """Sets the seed for this env's random number generator(s).
-        Note:
-            Some environments use multiple pseudorandom number generators.
-            We want to capture all such seeds used in order to ensure that
-            there aren't accidental correlations between multiple generators.
-        Returns:
-            list<bigint>: Returns the list of seeds used in this env's random
-              number generators. The first value in the list should be the
-              "main" seed, or the value which a reproducer should pass to
-              'seed'. Often, the main seed equals the provided 'seed', but
-              this won't be true if seed=None, for example.
-        """
-        logger.warn("Could not seed environment %s", self)
+        # this is a deterministic environment
         return
-
-    @property
-    def unwrapped(self):
-        """Completely unwrap this env.
-        Returns:
-            gym.Env: The base non-wrapped gym.Env instance
-        """
-        return self
-
-    def __str__(self):
-        if self.spec is None:
-            return '<{} instance>'.format(type(self).__name__)
-        else:
-            return '<{}<{}>>'.format(type(self).__name__, self.spec.id)
 
     def get_state(self):
         turn = self.turn
@@ -231,3 +264,49 @@ class Go(gym.Env):
         action = self.move_history[idx]
 
         return state, action, reward
+
+    def capture_pieces(self, black_board, white_board, y,x):
+        """Remove all pieces from the board that have 
+        no liberties. This function modifies the input variables in place.
+
+        black_board is a 19x19 np.array with value 1.0 if a black stone is
+        present and 0.0 otherwise.
+
+        white_board is a 19x19 np.array similar to black_board.
+
+        active_player - the player that made a move
+        (x,y) - position of the move
+
+        """
+
+        # only test neighboors of current move (other's will have unchanged
+        # liberties)
+        neighboors = get_neighboors(y,x,black_board.shape)
+
+        if self.turn == "white":
+            board = white_board
+            opponent_board = black_board
+        else:
+            board = black_board
+            opponent_board = white_board
+
+        # to test suicidal moves
+        original_pos = (y,x)
+
+        # only test adjacent stones in opponent's color
+        for pos in neighboors:
+            if not opponent_board[pos]:
+                continue
+
+            current_group = np.zeros_like(board)
+            has_liberties = test_group(opponent_board, board, *pos, current_group)
+
+            if not has_liberties:
+                opponent_board[current_group] = 0.0
+
+        current_group = np.zeros_like(board)
+        has_liberties = test_group(board, opponent_board, *original_pos, current_group)
+        if not has_liberties:
+            # actually my replays are not only played with Japanese or Chinese rules
+            board[current_group] = 0.0
+            #raise Exception("Suicidal moves are illegal in Japanese and Chinese rules!")
