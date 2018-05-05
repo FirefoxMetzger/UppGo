@@ -1,6 +1,8 @@
 import gym
 from gym.spaces import Discrete, Tuple
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvas
 
 # game gives reward of -1 or +1
 # ends when both players pass their turn, after a number of times or player resigns
@@ -32,7 +34,7 @@ def test_group(board, opponent_board, y, x, current_group):
 
     """
 
-    pos = (y,x)
+    pos = (y, x)
 
     if board[pos] and not current_group[pos]:
         has_liberties = False
@@ -84,25 +86,28 @@ class Go(gym.Env):
         black_board_state = self.black_history[-1].copy()
 
         if not action == 361:  # 361 is the pass action
-            (y, x) = np.unravel_index(action, board_size)
+            (y, x) = np.unravel_index(action, self.board_size)
             if white_board_state[y, x] or black_board_state[y, x]:
                 self.render()
-                print("Desired Move: %s: (%d,%d)" % (self.turn, y, x))
+                if self.is_turn_white:
+                    print("Desired Move: %s: (%d,%d)" % ("white", y, x))
+                else:
+                    print("Desired Move: %s: (%d,%d)" % ("black", y, x))
                 raise Exception("Can't move on top of another stone")
 
             if self.is_turn_white:
                 white_board_state[y, x] = 1.0
                 self.capture_pieces(white_board_state, black_board_state, y, x)
-                self.is_turn_white = True
+                self.is_turn_white = False
             else:
                 black_board_state[y, x] = 1.0
                 self.capture_pieces(black_board_state, white_board_state, y, x)
-                self.is_turn_white = False
+                self.is_turn_white = True
 
         self.action_history.append(action)
         self.white_history.append(white_board_state)
         self.black_history.append(black_board_state)
-        
+
         observation = self.get_state()
         return observation, 0, False, {}
 
@@ -111,11 +116,11 @@ class Go(gym.Env):
         self.black_history = list()
         self.white_history = list()
 
-        white_board = np.zeros(board_size, dtype=bool)
-        black_board = np.zeros(board_size, dtype=bool)
+        white_board = np.zeros(self.board_size, dtype=bool)
+        black_board = np.zeros(self.board_size, dtype=bool)
 
         if initial_stones:
-            positions = np.unravel_index(initial_stones, boad_size)
+            positions = np.unravel_index(initial_stones, self.board_size)
             for y, x in positions:
                 black_board[x, y] = True
             self.is_turn_white = True
@@ -123,6 +128,7 @@ class Go(gym.Env):
         for _ in range(8):
             self.black_history.append(black_board.copy())
             self.white_history.append(white_board.copy())
+            self.action_history.append(361)
 
         return self.get_state()
 
@@ -148,13 +154,42 @@ class Go(gym.Env):
                 else:
                     row = str(y)
                 for x in range(black_board.shape[1]):
-                    if white_board[y,x]:
+                    if white_board[y, x]:
                         row += "W"
-                    elif black_board[y,x]:
+                    elif black_board[y, x]:
                         row += "B"
                     else:
-                        row +="-"
+                        row += "-"
                 print(row)
+        elif mode == "rgb_array":
+            # draw the grid
+            fig = plt.figure()
+            canvas = FigureCanvas(fig)
+            ax = fig.gca()
+            ax.set_facecolor((0.7843, 0.6314, 0.3961))
+            ax.grid()
+            ax.set_axisbelow(True)
+            ax.set_xlim(left=-1, right=20)
+            ax.set_xticks(range(0, 20))
+            ax.set_ylim((-1, 20))
+            ax.set_yticks(range(0, 20))
+            for x in range(self.board_size[1]):
+                for y in range(self.board_size[0]):
+                    if self.white_history[-1][y, x]:
+                        circ = plt.Circle((x, y), radius=0.49, color=(1, 1, 1))
+                        ax.add_artist(circ)
+                        print("white stone")
+                    if self.black_history[-1][y, x]:
+                        circ = plt.Circle((x, y), radius=0.49, color=(0, 0, 0))
+                        ax.add_artist(circ)
+                        print("black stone")
+            canvas.draw()
+            width, height = fig.get_size_inches() * fig.get_dpi()
+            img = np.fromstring(canvas.tostring_rgb(),
+                                dtype='uint8').reshape((int(height), 
+                                                        int(width), 3))
+            
+            return img
         else:
             raise NotImplementedError
 
@@ -166,7 +201,7 @@ class Go(gym.Env):
         return
 
     def get_state(self):
-        return get_history_state(len(self.black_history))
+        return self.get_history_state(len(self.black_history))
 
     def get_history_step(self, idx):
         state = self.get_history_state(idx)
@@ -186,7 +221,7 @@ class Go(gym.Env):
         else:  # black move
             state[:, :, 0:8] = np.stack(black_history, axis=2)
             state[:, :, 8:16] = np.stack(white_history, axis=2)
-        state[:, :, 16] = is_turn_white
+        state[:, :, 16] = is_turn_black
 
         return state
 
@@ -203,7 +238,7 @@ class Go(gym.Env):
         (x,y) - position of the move
 
         """
-        neighboors = get_neighboors(y, x, board_size)
+        neighboors = get_neighboors(y, x, self.board_size)
         original_pos = (y, x)
 
         # only test adjacent stones in opponent's color
@@ -224,3 +259,7 @@ class Go(gym.Env):
 
         if not has_liberties:
             raise Exception("Suicidal moves are illegal in Japanese and Chinese rules!")
+
+if __name__ == "__main__":
+    # play against yourself
+    board = Go()
