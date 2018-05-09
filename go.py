@@ -38,12 +38,15 @@ def test_group(board, opponent_board, y, x, current_group):
 
     if board[pos] and not current_group[pos]:
         has_liberties = False
-        current_group[pos] = 1.0
+        current_group[pos] = True
 
         neighboors = get_neighboors(y, x, board.shape)
 
         for yn, xn in neighboors:
-            has_liberties = test_group(board, opponent_board, yn, xn, 
+            if current_group[yn, xn]:
+                continue
+
+            has_liberties = test_group(board, opponent_board, yn, xn,
                                        current_group)
             if has_liberties:
                 return True
@@ -261,14 +264,11 @@ class Go(gym.Env):
         for pos in neighboors:
             if not opponent_board[pos]:
                 continue
-
             current_group = np.zeros_like(board)
             has_liberties = test_group(opponent_board, board, *pos,
                                        current_group)
-
             if not has_liberties:
                 opponent_board[current_group] = 0.0
-                print("removing stones")
 
         current_group = np.zeros_like(board)
         has_liberties = test_group(board, opponent_board, *original_pos, 
