@@ -132,7 +132,7 @@ class Go(gym.Env):
 
         return self.get_state()
 
-    def render(self, mode='human'):
+    def render(self, mode='human', ax=None):
         """Renders the environment.
         Supported Modes:
         - human: Print the current board state in the current terminal
@@ -178,18 +178,34 @@ class Go(gym.Env):
                     if self.white_history[-1][y, x]:
                         circ = plt.Circle((x, y), radius=0.49, color=(1, 1, 1))
                         ax.add_artist(circ)
-                        print("white stone")
                     if self.black_history[-1][y, x]:
                         circ = plt.Circle((x, y), radius=0.49, color=(0, 0, 0))
                         ax.add_artist(circ)
-                        print("black stone")
             canvas.draw()
             width, height = fig.get_size_inches() * fig.get_dpi()
             img = np.fromstring(canvas.tostring_rgb(),
-                                dtype='uint8').reshape((int(height), 
+                                dtype='uint8').reshape((int(height),
                                                         int(width), 3))
-            
+            plt.close(fig)
             return img
+        elif mode == "axes":
+             # draw the grid
+            ax.clear()
+            ax.set_facecolor((0.7843, 0.6314, 0.3961))
+            ax.grid()
+            ax.set_axisbelow(True)
+            ax.set_xlim(left=-1, right=20)
+            ax.set_xticks(range(0, 20))
+            ax.set_ylim((-1, 20))
+            ax.set_yticks(range(0, 20))
+            for x in range(self.board_size[1]):
+                for y in range(self.board_size[0]):
+                    if self.white_history[-1][y, x]:
+                        circ = plt.Circle((x, y), radius=0.49, color=(1, 1, 1))
+                        ax.add_artist(circ)
+                    if self.black_history[-1][y, x]:
+                        circ = plt.Circle((x, y), radius=0.49, color=(0, 0, 0))
+                        ax.add_artist(circ)
         else:
             raise NotImplementedError
 
@@ -252,6 +268,7 @@ class Go(gym.Env):
 
             if not has_liberties:
                 opponent_board[current_group] = 0.0
+                print("removing stones")
 
         current_group = np.zeros_like(board)
         has_liberties = test_group(board, opponent_board, *original_pos, 
@@ -260,6 +277,22 @@ class Go(gym.Env):
         if not has_liberties:
             raise Exception("Suicidal moves are illegal in Japanese and Chinese rules!")
 
+    def __len__(self):
+        return len(self.action_history)
+
 if __name__ == "__main__":
-    # play against yourself
     board = Go()
+    board.reset()
+
+    def onclick(event):
+        x = int(round(event.xdata))
+        y = int(round(event.ydata))
+        idx = np.ravel_multi_index((y, x), (19, 19))
+        board.step(idx)
+        board.render('axes', ax)
+        fig.show()
+
+    fig, ax = plt.subplots()
+    cid = fig.canvas.mpl_connect('button_press_event', onclick)
+    board.render('axes', ax)
+    plt.show()
