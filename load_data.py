@@ -82,15 +82,19 @@ class ReplayQueue(Sequence):
         self.queue_size = queue_size
         self.replays = list()
         self.results = list()
+        self.actions = list()
 
-    def insert(self, replay_file, result_file):
-        replay = np.load(replay_location, mmap_mode="r")
-        result = np.load(result, mmap_mode="r")
+    def insert(self, example_file, action_file, label_file):
+        replay = np.load(label_file, mmap_mode="r")
+        result = np.load(example_file, mmap_mode="r")
+        action = np.load(action_file, mmap_mode="r")
         self.replays.append(replay)
         self.results.append(result)
+        self.actions.append(action)
         if len(self.replays) > self.queue_size:
             self.replays.pop(0)
             self.results.pop(0)
+            self.actions.pop(0)
 
     def __getitem__(self, idx):
         if len(self) <= self.batch_size:
@@ -100,7 +104,8 @@ class ReplayQueue(Sequence):
 
             example = self.replays[replay_idx][:, :, :, move_idx]
             label = self.results[replay_idx][move_idx]
-            return (example, label)
+            action = self.actions[replay_idx][:, move_idx]
+            return (example, action, label)
         else:
             raise IndexError("Requested Element at the end of batch")
 
@@ -123,28 +128,27 @@ def create_dataset(training_path, test_path, validation_path):
 
     for key, storage in dataset.items():
         print("--- Loading %s Data ---" % key)
-        label_location = storage["location"] / "examples"
         example_location = storage["location"] / "labels"
+        action_location = storage["location"] / "actions"
+        label_location = storage["location"] / "examples"
 
-        num_examples = len(glob.glob(example_location / "*.npy"))
-        data_pairs = [(example_location / ("%d.npy" % idx),
-                      label_location / ("%d.npy" % idx))
-                      for idx in range(num_examples)]
+        num_examples = len(glob.glob(str(example_location / "*.npy")))
+        data_triplets = [(example_location / ("%d.npy" % idx),
+                         action_location / ("%d.npy" % idx),
+                         label_location / ("%d.npy" % idx))
+                         for idx in range(num_examples)]
 
         feeder = ReplayQueue()
-        for replay, result in data_pairs:
-            feeder.insert(replay, result)
+        for replay, action, result in data_triplets:
+            feeder.insert(str(replay), str(action), str(result))
         storage["feeder"] = feeder
 
     return dataset
 
 
-def main():
-    try:
-        rmtree("numpy")
-    except FileNotFoundError:
-        print("Numpy folder did not exist in working directory")
-    makedirs("numpy")
+if __name__ == "__main__":
+    #rmtree("numpy", ignore_errors=True)
+    #makedirs("numpy", exist_ok=True)
 
     all_data_path = "replays/all_replays/*.sgf"
     data = glob.glob(all_data_path)
@@ -160,8 +164,7 @@ def main():
     }
 
     # create numpy dataset
-    generate_numpy_dataset(data_split, Path("numpy"))
-
-
-if __name__ == "__main__":
-    main()
+    #generate_numpy_dataset(data_split, Path("numpy"))
+    create_dataset(Path("numpy/training"),
+                   Path("numpy/test"),
+                   Path("numpy/validation"))
