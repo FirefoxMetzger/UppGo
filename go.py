@@ -131,7 +131,7 @@ class Go(gym.Env):
         for _ in range(8):
             self.black_history.append(black_board.copy())
             self.white_history.append(white_board.copy())
-            self.action_history.append(361)
+        self.action_history.append(361)
 
         return self.get_state()
 
@@ -219,10 +219,10 @@ class Go(gym.Env):
         return
 
     def get_state(self):
-        return self.get_history_state(len(self.black_history))
+        return self.get_history_state(len(self)-1 + 8)
 
     def get_history_step(self, idx):
-        state = self.get_history_state(idx)
+        state = self.get_history_state(idx+8)
         action = self.action_history[idx]
 
         return state, action

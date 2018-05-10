@@ -1,6 +1,7 @@
 *.png
 **/__pycache__/
 /logs/
+/numpy/
 *.zip
 **/replays
 /models/

@@ -4,82 +4,77 @@ import numpy as np
 from go import Go
 from shutil import copy
 import random
- 
+from pathlib import Path
+from os import makedirs
+from shutil import rmtree
 from keras.utils import Sequence
 
 
-def calculate_split_data(data, test_percent, validation_percent):
-    training_percent = 1-test_percent-validation_percent
-    total_games = len(data)
+def generate_numpy_dataset(source, location):
+    for key, data in source.items():
+        print("--- Converting %s Set ---" % key)
+        examples_location = location / key / "examples"
+        labels_location = location / key / "labels"
+        actions_location = location / key / "actions"
+        makedirs(examples_location, exist_ok=True)
+        makedirs(labels_location, exist_ok=True)
+        makedirs(actions_location, exist_ok=True)
 
-    num_validation = int(np.ceil(total_games * validation_percent))
-    num_test = int(np.ceil(total_games * test_percent))
-    num_training = total_games - num_validation - num_test
+        for idx, replay in enumerate(data):
+            with open(replay, "r") as f:
+                collection = sgf.parse(f.read())
 
-    order = np.random.permutation(total_games)
-    training_games = order[:num_training]
-    validation_games = order[num_training:num_training+num_validation]
-    test_games = order[num_training+num_validation:]
-
-    training = [data[i] for i in training_games]
-    validation = [data[i] for i in validation_games]
-    test = [data[i] for i in test_games]
-
-    return training, validation, test
-
-
-def generate_split(location, test_percent=0.05, validation_percent=0.05):
-    replays = glob.glob(location)
-    training, validation, test = calculate_split_data(replays, test_percent, validation_percent)
-
-    for replay in training:
-            copy(replay, "replays/training_set/")
-    for replay in validation:
-            copy(replay, "replays/validation_set/")
-    for replay in test:
-            copy(replay, "replays/test_set/")
+            examples, actions, labels = sgf_to_npy(collection)
+            np.save(examples_location / ("%d.npy" % idx), examples)
+            np.save(labels_location / ("%d.npy" % idx), labels)
+            np.save(actions_location / ("%d.npy" % idx), actions)
 
 
-def loadData(location):
-    replays = glob.glob(location)
+def sgf_to_npy(sgf_collection):
     positions = "abcdefghijklmnopqrs"
+    game = sgf_collection[0]
+    black_win = True if game.root.properties["RE"][0] == "B" else False
 
-    game_data = list()
-    for replay in replays:
-        with open(replay, "r") as f:
-            collection = sgf.parse(f.read())
+    initial_stones = []
+    for key, value in game.root.properties:
+        if key == "AB":
+            initial_stones.append(value[0])
 
-        for game in collection:
-            result = game.root.properties["RE"]
+    sim = Go()
+    if initial_stones:
+        sim.reset(initial_stones=initial_stones)
+    else:
+        sim.reset()
 
-            initial_stones = []
-            for key, value in game.root.properties:
-                if key == "AB":
-                    initial_stones.append(value[0])
+    for move in game.rest:
+        try:
+            stone_position = move.properties["B"][0]
+        except KeyError:
+            stone_position = move.properties["W"][0]
 
-            sim = Go()
-            if initial_stones:
-                sim.reset(initial_stones=initial_stones)
-            else:
-                sim.reset()
+        if stone_position == "":
+            action = 361
+        else:
+            x = positions.index(stone_position[0])
+            y = positions.index(stone_position[1])
+            action = np.ravel_multi_index((y, x), (19, 19))
 
-            for move in game.rest:
-                try:
-                    stone_position = move.properties["B"][0]
-                except KeyError:
-                    stone_position = move.properties["W"][0]
+        sim.step(action)
 
-                if stone_position == "":
-                    action = 361
-                else:
-                    x = positions.index(stone_position[0])
-                    y = positions.index(stone_position[1])
-                    action = np.ravel_multi_index((y, x), (19, 19))
+    examples = np.zeros((19, 19, 17, len(sim)), dtype=bool)
+    actions = np.zeros((362, len(sim)))
+    for idx in range(len(sim)):
+        state, action_idx = sim.get_history_step(idx)
+        examples[:, :, :, idx] = state
+        actions[action_idx, idx] = 1
 
-                sim.step(action)
-                img = sim.render('rgb_array')
-            game_data.append({"game": sim, "result": result})
-    return game_data
+    results = np.ones(len(sim))
+    if black_win:
+        results[1::2] = -1
+    else:
+        results[::2] = -1
+
+    return examples, actions, results
 
 
 class ReplayQueue(Sequence):
@@ -90,7 +85,7 @@ class ReplayQueue(Sequence):
 
     def insert(self, replay_file, result_file):
         replay = np.load(replay_location, mmap_mode="r")
-        result = np.load(result)
+        result = np.load(result, mmap_mode="r")
         self.replays.append(replay)
         self.results.append(result)
         if len(self.replays) > self.queue_size:
@@ -103,8 +98,8 @@ class ReplayQueue(Sequence):
             replay_idx = np.argmax(acc_moves > idx) - 1
             move_idx = idx - self.accumulated_position[replay_idx]
 
-            example = self.replays[replay_idx][:::move_idx]
-            label = self.results[replay_idx]
+            example = self.replays[replay_idx][:, :, :, move_idx]
+            label = self.results[replay_idx][move_idx]
             return (example, label)
         else:
             raise IndexError("Requested Element at the end of batch")
@@ -116,7 +111,7 @@ class ReplayQueue(Sequence):
         return self
 
     def moves_per_game(self):
-        return [replay.shape[4] for replay in self.replays]
+        return [replay.shape[3] for replay in self.replays]
 
 
 def create_dataset(training_path, test_path, validation_path):
@@ -128,14 +123,16 @@ def create_dataset(training_path, test_path, validation_path):
 
     for key, storage in dataset.items():
         print("--- Loading %s Data ---" % key)
-        label_location = locations / "results" / "*.npy"
-        labels = glob.glob(label_location)
+        label_location = storage["location"] / "examples"
+        example_location = storage["location"] / "labels"
 
-        example_location = locations / "replays" / "*.npy"
-        examples = glob.glob(example_location)
+        num_examples = len(glob.glob(example_location / "*.npy"))
+        data_pairs = [(example_location / ("%d.npy" % idx),
+                      label_location / ("%d.npy" % idx))
+                      for idx in range(num_examples)]
 
         feeder = ReplayQueue()
-        for replay, result in zip(examples, labels):
+        for replay, result in data_pairs:
             feeder.insert(replay, result)
         storage["feeder"] = feeder
 
@@ -143,25 +140,27 @@ def create_dataset(training_path, test_path, validation_path):
 
 
 def main():
+    try:
+        rmtree("numpy")
+    except FileNotFoundError:
+        print("Numpy folder did not exist in working directory")
+    makedirs("numpy")
+
     all_data_path = "replays/all_replays/*.sgf"
-    training_path = "replays/training_set/*.sgf"
-    validation_path = "replays/validation_set/*.sgf"
-    test_path = "replays/test_set/*.sgf"
+    data = glob.glob(all_data_path)
 
-    # generate_split(all_data_path,test_percent=0.01,validation_percent=0.005)
+    # filter replays
+    random.shuffle(data)
 
-    training_data = loadData(training_path)
-    validation_data = loadData(validation_path)
-    test_data = loadData(test_path)
+    # split data
+    data_split = {
+        "training": data[350:],
+        "test": data[100:450],
+        "validation": data[:100],
+    }
 
-    generator = SupervisedGoBatches(training_data, 512)
-    print("There are %d training batches" % len(generator))
-
-    generator = SupervisedGoBatches(validation_data, 512)
-    print("There are %d validation batches" % len(generator))
-
-    generator = SupervisedGoBatches(test_data, 512)
-    print("There are %d test batches" % len(generator))
+    # create numpy dataset
+    generate_numpy_dataset(data_split, Path("numpy"))
 
 
 if __name__ == "__main__":
