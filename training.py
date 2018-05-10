@@ -2,55 +2,66 @@ from keras.losses import mean_squared_error, categorical_crossentropy
 from keras.optimizers import adam
 from keras.metrics import categorical_accuracy, top_k_categorical_accuracy
 from keras.callbacks import ModelCheckpoint
+import keras
+from pathlib import Path
 
 from network import model
-from load_data import loadData, SupervisedGoBatches
-
-import keras
-logger = keras.callbacks.TensorBoard(log_dir='./logs', histogram_freq=0, batch_size=32, write_graph=True, write_grads=False, write_images=False, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None)
+from load_data import create_dataset, ReplayQueue
 
 
-loss_function = {"policy":categorical_crossentropy, "value":mean_squared_error}
+logger = keras.callbacks.TensorBoard(log_dir='./logs',
+                                     histogram_freq=0,
+                                     batch_size=32,
+                                     write_graph=True,
+                                     write_grads=False,
+                                     write_images=False,
+                                     embeddings_freq=0,
+                                     embeddings_layer_names=None,
+                                     embeddings_metadata=None)
+
+
+loss_function = {"policy": categorical_crossentropy, 
+                 "value": mean_squared_error}
+
+
 def moves_predicted(y_true, y_pred):
-    val = categorical_accuracy(y_true,y_pred)
+    val = categorical_accuracy(y_true, y_pred)
     return val
-def moves_top10(y_true,y_pred):
-    val = top_k_categorical_accuracy(y_true,y_pred,k=10)
+
+
+def moves_top10(y_true, y_pred):
+    val = top_k_categorical_accuracy(y_true, y_pred, k=10)
     return val
 
 model.compile(
     adam(),
     loss=loss_function,
-    loss_weights={"policy":1,"value":0.01},
+    loss_weights={"policy": 1,
+                  "value": 0.01},
     metrics={
-        "policy":[moves_predicted, moves_top10],
-        "value":[]
+        "policy": [moves_predicted, moves_top10],
+        "value": []
     }
 )
 
 batch_size = 256
 
-print("--- Loading Training Data ---")
 data_files = "replays/training_set/*.sgf"
-data = loadData(data_files)
-training_feeder = SupervisedGoBatches(data, batch_size)
-
-print("--- Loading Validation Data ---")
 data_files = "replays/validation_set/*.sgf"
-data = loadData(data_files)
-validation_feeder = SupervisedGoBatches(data, batch_size)
-
-print("--- Loading Test Data ---")
 data_files = "replays/test_set/*.sgf"
-data = loadData(data_files)
-test_feeder = SupervisedGoBatches(data, batch_size)
+
+dataset = create_dataset(
+    Path("numpy/training"),
+    Path("numpy/test"),
+    Path("numpy/validation"),
+)
 
 print("--- Starting to fit the model ---")
 
 model.fit_generator(
-    training_feeder,
+    dataset["training"]["feeder"],
     epochs=50,
-    validation_data=validation_feeder,
+    validation_data=dataset["validation"]["feeder"],
     callbacks=[
         logger,
         ModelCheckpoint("./models/keras_model_ep_{epoch:02d}-{loss:.2f}.hdf5")

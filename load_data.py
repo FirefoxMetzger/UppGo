@@ -3,8 +3,10 @@ import glob
 import numpy as np
 from go import Go
 from shutil import copy
-
+import random
+ 
 from keras.utils import Sequence
+
 
 def calculate_split_data(data, test_percent, validation_percent):
     training_percent = 1-test_percent-validation_percent
@@ -25,6 +27,7 @@ def calculate_split_data(data, test_percent, validation_percent):
 
     return training, validation, test
 
+
 def generate_split(location, test_percent=0.05, validation_percent=0.05):
     replays = glob.glob(location)
     training, validation, test = calculate_split_data(replays, test_percent, validation_percent)
@@ -36,6 +39,7 @@ def generate_split(location, test_percent=0.05, validation_percent=0.05):
     for replay in test:
             copy(replay, "replays/test_set/")
 
+
 def loadData(location):
     replays = glob.glob(location)
     positions = "abcdefghijklmnopqrs"
@@ -46,116 +50,97 @@ def loadData(location):
             collection = sgf.parse(f.read())
 
         for game in collection:
+            result = game.root.properties["RE"]
+
+            initial_stones = []
+            for key, value in game.root.properties:
+                if key == "AB":
+                    initial_stones.append(value[0])
+
             sim = Go()
-            try:
-                game.root.properties["RE"]
-            except KeyError:
-                print("Can't find result for %s " % replay)
-                continue
-            sim.reset(game.root)
-            if game.rest is None:
-                print("Replay has no moves: %s" % replay)
-                continue
+            if initial_stones:
+                sim.reset(initial_stones=initial_stones)
+            else:
+                sim.reset()
 
             for move in game.rest:
                 try:
                     stone_position = move.properties["B"][0]
                 except KeyError:
                     stone_position = move.properties["W"][0]
-                
+
                 if stone_position == "":
                     action = 361
                 else:
                     x = positions.index(stone_position[0])
                     y = positions.index(stone_position[1])
-                    action = np.ravel_multi_index((y,x),(19,19))
-                
+                    action = np.ravel_multi_index((y, x), (19, 19))
+
                 sim.step(action)
-            game_data.append(sim)
+                img = sim.render('rgb_array')
+            game_data.append({"game": sim, "result": result})
     return game_data
 
-class SupervisedGoBatches(Sequence):
-    def __init__(self, initial_games, batch_size):
-        self.batch_size = batch_size
-        self.new_games = list()
-        self.current_games = initial_games
 
-        moves_per_game = list()
-        for game in initial_games:
-            moves_per_game.append(len(game.move_history))
-        self.moves_per_game = np.array(moves_per_game)
-        self.total_examples = np.sum(moves_per_game)
-        self.accumulated_position = np.cumsum(np.hstack((0,moves_per_game)))
+class ReplayQueue(Sequence):
+    def __init__(self, queue_size=2500):
+        self.queue_size = queue_size
+        self.replays = list()
+        self.results = list()
 
-        # the first 1 million prime numbers
-        primes = np.loadtxt("primes1.txt").flatten()
-        
-        #smallest prime bigger then total_examples
-        modulus_idx = np.argmax(primes > self.total_examples)
-        self.modulus = primes[modulus_idx]
+    def insert(self, replay_file, result_file):
+        replay = np.load(replay_location, mmap_mode="r")
+        result = np.load(result)
+        self.replays.append(replay)
+        self.results.append(result)
+        if len(self.replays) > self.queue_size:
+            self.replays.pop(0)
+            self.results.pop(0)
 
-        self.step_size = np.random.random_integers(0,self.modulus)
-        self.start = np.random.random_integers(0,self.modulus)
-        self.current_element = self.start
+    def __getitem__(self, idx):
+        if len(self) <= self.batch_size:
+            acc_moves = np.cumsum([0] + self.moves_per_game())
+            replay_idx = np.argmax(acc_moves > idx) - 1
+            move_idx = idx - self.accumulated_position[replay_idx]
 
-        self.batch_indexes = [self.start]
-        
-    def __getitem__(self, batch_idx):
-        if batch_idx > len(self):
-            raise IndexError("%i is out of bounds for %i batches" % (batch_idx, len(self)))
-
-        states = np.zeros((self.batch_size,19,19,17))
-        actions = np.zeros(self.batch_size, dtype=int)
-        rewards = np.zeros(self.batch_size)
-
-        current_element = self.begining_of_batch(batch_idx)
-
-        for idx in range(self.batch_size):
-            game_idx = np.argmax(self.accumulated_position > current_element) - 1
-            move_idx = current_element - self.accumulated_position[game_idx]
-
-            state, action, reward = self.current_games[game_idx].get_history_step(move_idx)
-            states[idx,:,:,:] = state
-            actions[idx] = action
-            rewards[idx] = reward
-
-            current_element = self.next_element(current_element)
-
-        if batch_idx == len(self.batch_indexes) - 1:
-            self.batch_indexes.append(current_element)
-
-        # encode actions as 1-hot
-        hot_actions = np.zeros((actions.shape[0], 362))
-        hot_actions[np.arange(actions.shape[0],dtype=int),actions] = 1
-
-        return states, {"policy":hot_actions, "value":rewards}
-
-    def begining_of_batch(self, batch_idx):
-        while len(self.batch_indexes) - 1 < batch_idx:
-            current = self.batch_indexes[-1]
-            for _ in range(self.batch_size):
-                current = self.next_element(current)
-            self.batch_indexes.append(self.current_element)
-        
-        return self.batch_indexes[batch_idx]
+            example = self.replays[replay_idx][:::move_idx]
+            label = self.results[replay_idx]
+            return (example, label)
+        else:
+            raise IndexError("Requested Element at the end of batch")
 
     def __len__(self):
-        return int(np.floor(self.total_examples/self.batch_size))
+        return sum(self.moves_per_game())
 
-    def next_element(self, start_element):
-        candidate = (start_element + self.step_size) % self.modulus
-        while candidate > self.total_examples:
-            candidate = (candidate + self.step_size) % self.modulus
-        
-        return int(candidate)
+    def __iter__(self):
+        return self
 
-    def on_epoch_end(self):
-        self.reset_generator()
+    def moves_per_game(self):
+        return [replay.shape[4] for replay in self.replays]
 
-    def reset_generator(self):
-        self.step_size = np.random.random_integers(0,self.modulus)
-        self.start = np.random.random_integers(0,self.modulus)
-        self.batch_indexes = [self.start]
+
+def create_dataset(training_path, test_path, validation_path):
+    dataset = {
+        "training":   {"location": training_path},
+        "test":       {"location": test_path},
+        "validation": {"location": validation_path}
+    }
+
+    for key, storage in dataset.items():
+        print("--- Loading %s Data ---" % key)
+        label_location = locations / "results" / "*.npy"
+        labels = glob.glob(label_location)
+
+        example_location = locations / "replays" / "*.npy"
+        examples = glob.glob(example_location)
+
+        feeder = ReplayQueue()
+        for replay, result in zip(examples, labels):
+            feeder.insert(replay, result)
+        storage["feeder"] = feeder
+
+    return dataset
+
 
 def main():
     all_data_path = "replays/all_replays/*.sgf"
@@ -174,9 +159,10 @@ def main():
 
     generator = SupervisedGoBatches(validation_data, 512)
     print("There are %d validation batches" % len(generator))
-    
+
     generator = SupervisedGoBatches(test_data, 512)
     print("There are %d test batches" % len(generator))
+
 
 if __name__ == "__main__":
     main()
