@@ -172,10 +172,10 @@ class Go(gym.Env):
             ax.set_facecolor((0.7843, 0.6314, 0.3961))
             ax.grid()
             ax.set_axisbelow(True)
-            ax.set_xlim(left=-1, right=20)
-            ax.set_xticks(range(0, 20))
-            ax.set_ylim((-1, 20))
-            ax.set_yticks(range(0, 20))
+            ax.set_xlim(left=-1, right=19)
+            ax.set_xticks(range(0, 19))
+            ax.set_ylim((-1, 19))
+            ax.set_yticks(range(0, 19))
             for x in range(self.board_size[1]):
                 for y in range(self.board_size[0]):
                     if self.white_history[-1][y, x]:
@@ -192,15 +192,14 @@ class Go(gym.Env):
             plt.close(fig)
             return img
         elif mode == "axes":
-             # draw the grid
             ax.clear()
             ax.set_facecolor((0.7843, 0.6314, 0.3961))
             ax.grid()
             ax.set_axisbelow(True)
-            ax.set_xlim(left=-1, right=20)
-            ax.set_xticks(range(0, 20))
-            ax.set_ylim((-1, 20))
-            ax.set_yticks(range(0, 20))
+            ax.set_xlim(left=-1, right=19)
+            ax.set_xticks(range(0, 19))
+            ax.set_ylim((-1, 19))
+            ax.set_yticks(range(0, 19))
             for x in range(self.board_size[1]):
                 for y in range(self.board_size[0]):
                     if self.white_history[-1][y, x]:
