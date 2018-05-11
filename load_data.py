@@ -28,6 +28,8 @@ def generate_numpy_dataset(source, location):
             np.save(labels_location / ("%d.npy" % idx), labels)
             np.save(actions_location / ("%d.npy" % idx), actions)
 
+        print("%d Replays created." % idx)
+
 
 def sgf_to_npy(sgf_collection):
     positions = "abcdefghijklmnopqrs"
@@ -157,8 +159,8 @@ def create_dataset(training_path, test_path, validation_path):
 
 
 if __name__ == "__main__":
-    #rmtree("numpy", ignore_errors=True)
-    #makedirs("numpy", exist_ok=True)
+    rmtree("numpy", ignore_errors=True)
+    makedirs("numpy", exist_ok=True)
 
     all_data_path = "replays/all_replays/*.sgf"
     data = glob.glob(all_data_path)
@@ -176,7 +178,6 @@ if __name__ == "__main__":
             copy(replay, str(useful_dir))
         else:
             copy(replay, str(faulty_dir))
-
     data = glob.glob(str(useful_dir / "*.sgf"))
     random.shuffle(data)
 
@@ -188,7 +189,7 @@ if __name__ == "__main__":
     }
 
     # create numpy dataset
-    #generate_numpy_dataset(data_split, Path("numpy"))
+    generate_numpy_dataset(data_split, Path("numpy"))
     create_dataset(Path("numpy/training"),
                    Path("numpy/test"),
                    Path("numpy/validation"))
