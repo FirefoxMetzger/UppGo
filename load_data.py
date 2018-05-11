@@ -2,11 +2,10 @@ import sgf
 import glob
 import numpy as np
 from go import Go
-from shutil import copy
+from shutil import copy, rmtree
 import random
 from pathlib import Path
 from os import makedirs
-from shutil import rmtree
 from keras.utils import Sequence
 
 
@@ -75,6 +74,17 @@ def sgf_to_npy(sgf_collection):
         results[::2] = -1
 
     return examples, actions, results
+
+
+def replay_useful(replay):
+    with open(replay, "r") as f:
+        collection = sgf.parse(f.read())
+
+    try:
+        sgf_to_npy(collection)
+    except:
+        return False
+    return True
 
 
 class ReplayQueue(Sequence):
@@ -154,6 +164,20 @@ if __name__ == "__main__":
     data = glob.glob(all_data_path)
 
     # filter replays
+    useful_dir = Path("replays") / "useful"
+    faulty_dir = Path("replays") / "faulty"
+    rmtree(str(useful_dir), ignore_errors=True)
+    rmtree(str(faulty_dir), ignore_errors=True)
+    makedirs(useful_dir, exist_ok=True)
+    makedirs(faulty_dir, exist_ok=True)
+
+    for replay in data:
+        if replay_useful(replay):
+            copy(replay, str(useful_dir))
+        else:
+            copy(replay, str(faulty_dir))
+
+    data = glob.glob(str(useful_dir / "*.sgf"))
     random.shuffle(data)
 
     # split data
