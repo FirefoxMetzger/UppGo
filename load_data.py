@@ -8,16 +8,15 @@ from pathlib import Path
 from os import makedirs
 from keras.utils import Sequence
 
-
 def generate_numpy_dataset(source, location):
     for key, data in source.items():
         print("--- Converting %s Set ---" % key)
         examples_location = location / key / "examples"
         labels_location = location / key / "labels"
         actions_location = location / key / "actions"
-        makedirs(examples_location, exist_ok=True)
-        makedirs(labels_location, exist_ok=True)
-        makedirs(actions_location, exist_ok=True)
+        makedirs(str(examples_location), exist_ok=True)
+        makedirs(str(labels_location), exist_ok=True)
+        makedirs(str(actions_location), exist_ok=True)
 
         for idx, replay in enumerate(data):
             with open(replay, "r") as f:
@@ -109,10 +108,10 @@ class ReplayQueue(Sequence):
             self.actions.pop(0)
 
     def __getitem__(self, idx):
-        if len(self) <= self.batch_size:
+        if len(self) > idx:
             acc_moves = np.cumsum([0] + self.moves_per_game())
             replay_idx = np.argmax(acc_moves > idx) - 1
-            move_idx = idx - self.accumulated_position[replay_idx]
+            move_idx = idx - acc_moves[replay_idx]
 
             example = self.replays[replay_idx][:, :, :, move_idx]
             label = self.results[replay_idx][move_idx]
@@ -125,7 +124,7 @@ class ReplayQueue(Sequence):
         return sum(self.moves_per_game())
 
     def __iter__(self):
-        return self
+        return (self[idx] for idx in range(len(self)))
 
     def moves_per_game(self):
         return [replay.shape[3] for replay in self.replays]
@@ -159,19 +158,21 @@ def create_dataset(training_path, test_path, validation_path):
 
 
 if __name__ == "__main__":
-    rmtree("numpy", ignore_errors=True)
-    makedirs("numpy", exist_ok=True)
+    base_path = Path("/home/sebastian/UppGo-meta/")
 
-    all_data_path = "replays/all_replays/*.sgf"
-    data = glob.glob(all_data_path)
+    rmtree(str(base_path / "numpy"), ignore_errors=True)
+    makedirs(str(base_path / "numpy"), exist_ok=True)
+    numpy_data = base_path / "numpy"
+
+    data = glob.glob(str(base_path / 'data'/ 'all_data' / '*.sgf'))
 
     # filter replays
-    useful_dir = Path("replays") / "useful"
-    faulty_dir = Path("replays") / "faulty"
+    useful_dir = base_path / 'data' / "useful"
+    faulty_dir = base_path / 'data' / "faulty"
     rmtree(str(useful_dir), ignore_errors=True)
     rmtree(str(faulty_dir), ignore_errors=True)
-    makedirs(useful_dir, exist_ok=True)
-    makedirs(faulty_dir, exist_ok=True)
+    makedirs(str(useful_dir), exist_ok=True)
+    makedirs(str(faulty_dir), exist_ok=True)
 
     for replay in data:
         if replay_useful(replay):
@@ -189,7 +190,7 @@ if __name__ == "__main__":
     }
 
     # create numpy dataset
-    generate_numpy_dataset(data_split, Path("numpy"))
-    create_dataset(Path("numpy/training"),
-                   Path("numpy/test"),
-                   Path("numpy/validation"))
+    generate_numpy_dataset(data_split, numpy_data)
+    create_dataset((numpy_data / 'training'),
+                   (numpy_data / 'test'),
+                   (numpy_data / 'validation'))
