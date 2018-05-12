@@ -1,5 +1,6 @@
 from keras.engine.topology import Layer
 
+
 class Block(Layer):
     """
         An abstract class to make it easier to define the blocks
@@ -25,7 +26,7 @@ class Block(Layer):
                 The shape of the block's output.
     """
 
-    def __init__(self,**kwargs):
+    def __init__(self, **kwargs):
         super(Block, self).__init__(**kwargs)
         self.layers = list()
 

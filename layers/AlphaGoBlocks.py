@@ -7,30 +7,35 @@ from layers.Block import Block
 
 
 class ConvNorm(Block):
-    def __init__(self, features=256, kernel=3, c=1e-4, data_format=None,**kwargs):
+    def __init__(self, features=256, kernel=3, c=1e-4, 
+                 data_format=None, **kwargs):
         super(ConvNorm, self).__init__(**kwargs)
         data_format = conv_utils.normalize_data_format(data_format)
 
         # initialize all layers
         self.layers = [
-            Conv2D( features, 
-                kernel, 
-                strides=1, 
-                padding="same",
-                data_format=data_format,
-                kernel_regularizer=l2(c),
-                bias_regularizer=l2(c)),
-        BatchNormalization(axis=3,scale=False)
+            Conv2D(features,
+                   kernel,
+                   strides=1,
+                   padding="same",
+                   data_format=data_format,
+                   kernel_regularizer=l2(c),
+                   bias_regularizer=l2(c)
+            ),
+            BatchNormalization(axis=3, scale=False)
         ]   
 
+
 class Conv(Block):
-    def __init__(self, features=256, kernel=3, c=1e-4, data_format=None, **kwargs):
+    def __init__(self, features=256, kernel=3, c=1e-4, 
+                 data_format=None, **kwargs):
         super(Conv, self).__init__(**kwargs)
 
         self.layers = [
             ConvNorm(**kwargs),
             Activation("relu")
         ]
+
 
 class Residual(Block):
     # residual block
@@ -41,7 +46,7 @@ class Residual(Block):
     # norm
     # skip (add input to current tensor)
     # relu
-    def __init__(self, input_size, c=1e-4,**kwargs):
+    def __init__(self, input_size, c=1e-4, **kwargs):
         super(Residual, self).__init__(**kwargs)
 
         self.layers = [
@@ -50,11 +55,11 @@ class Residual(Block):
             Activation("relu"),
             ConvNorm(features=input_size, c=c),
             Add(),
-            Conv2D( input_size,3,
-                    strides=1,
-                    padding="same",
-                    kernel_regularizer=l2(c),
-                    bias_regularizer=l2(c))
+            Conv2D(input_size, 3,
+                   strides=1,
+                   padding="same",
+                   kernel_regularizer=l2(c),
+                   bias_regularizer=l2(c))
         ]
 
     def call(self, x):
@@ -79,40 +84,43 @@ class Residual(Block):
 
         return shape
 
+
 class ResidualTower(Block):
     def __init__(self, input_size, layers, **kwargs):
         super(ResidualTower, self).__init__(**kwargs)
 
         self.layers = [Residual(input_size) for _ in range(layers)]
 
+
 class ValueHead(Block):
     def __init__(self, **kwargs):
         super(ValueHead, self).__init__(**kwargs)
 
         self.layers = [
-            ConvNorm(features=1 ,kernel=1),
+            ConvNorm(features=1, kernel=1),
             Activation("relu"),
             Flatten(),
-            Dense(  256, 
-                    bias_regularizer=l2(1e-4),
-                    kernel_regularizer=l2(1e-4)),
+            Dense(256,
+                  bias_regularizer=l2(1e-4),
+                  kernel_regularizer=l2(1e-4)),
             Activation("relu"),
-            Dense(  1,
-            bias_regularizer=l2(1e-4),
-            kernel_regularizer=l2(1e-4)),
+            Dense(1,
+                  bias_regularizer=l2(1e-4),
+                  kernel_regularizer=l2(1e-4)),
             Activation("tanh")
         ]
+
 
 class PolicyHead(Block):
     def __init__(self, c=1e-4, **kwargs):
         super(PolicyHead, self).__init__(**kwargs)
 
         self.layers = [
-            ConvNorm(features=2 ,kernel=1, c=c),
+            ConvNorm(features=2, kernel=1, c=c),
             Activation("relu"),
             Flatten(),
-            Dense(  362,
-                    kernel_regularizer=l2(c),
-                    bias_regularizer=l2(c),
-                    activation="softmax")
+            Dense(362,
+                  kernel_regularizer=l2(c),
+                  bias_regularizer=l2(c),
+                  activation="softmax")
         ]

@@ -5,6 +5,7 @@ from layers.AlphaGoBlocks import ResidualTower, ValueHead, PolicyHead, Conv
 
 from keras.utils.vis_utils import plot_model
 from keras.regularizers import l2
+import keras
 
 
 # input: 19x19x17
@@ -12,21 +13,18 @@ from keras.regularizers import l2
 # last 8 board states for opposite player
 # 1 filled with current player (1=black, 0=white)
 # regularization is c = 0.0001
-tower = Sequential()
-tower.add(Conv(input_shape=(19,19,17)))
-# 19 residual blocks until the policy head
-# my little 650 Ti can't fit 19 layers into memory I will reduce this for testing :(
-tower.add(ResidualTower(256, 10)) # set this to 19 on TITAN V
-tower.add(Activation("linear", trainable=False, name="head"))
-residual_head = tower.get_layer(name="head").output
+def AlphaZero(input_tensor, residual_blocks=10):
+    x = Conv()(input_tensor)
+    x = ResidualTower(256, residual_blocks)(x)
+    value = ValueHead(name="value")(x)
+    policy = PolicyHead(name="policy")(x)
 
-value = ValueHead(name="value")(residual_head)
-policy = PolicyHead(name="policy")(residual_head)
-
-model = Model(tower.input, [policy,value])
+    return Model(input_tensor, [policy, value])
 
 if __name__ == "__main__":
     # if this function is called, visualize the network
     # this is for debugging purposes mainly
+    a = keras.Input(shape=[19, 19, 17])
+    model = AlphaZero(a, residual_blocks=2)
     model.summary()
     plot_model(model, to_file="test.png")

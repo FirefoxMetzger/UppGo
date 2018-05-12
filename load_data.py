@@ -8,6 +8,7 @@ from pathlib import Path
 from os import makedirs
 from keras.utils import Sequence
 
+
 def generate_numpy_dataset(source, location):
     for key, data in source.items():
         print("--- Converting %s Set ---" % key)
@@ -116,7 +117,7 @@ class ReplayQueue(Sequence):
             example = self.replays[replay_idx][:, :, :, move_idx]
             label = self.results[replay_idx][move_idx]
             action = self.actions[replay_idx][:, move_idx]
-            return (example, action, label)
+            return (example.astype(np.float32), action, label)
         else:
             raise IndexError("Requested Element at the end of batch")
 
@@ -164,7 +165,7 @@ if __name__ == "__main__":
     makedirs(str(base_path / "numpy"), exist_ok=True)
     numpy_data = base_path / "numpy"
 
-    data = glob.glob(str(base_path / 'data'/ 'all_data' / '*.sgf'))
+    data = glob.glob(str(base_path / 'data' / 'all_data' / '*.sgf'))
 
     # filter replays
     useful_dir = base_path / 'data' / "useful"
