@@ -13,17 +13,7 @@ import tensorflow as tf
 session = tf.Session()
 keras.backend.set_session(session)
 
-
-def moves_predicted(y_true, y_pred):
-    val = categorical_accuracy(y_true, y_pred)
-    return val
-
-
-def moves_top10(y_true, y_pred):
-    val = top_k_categorical_accuracy(y_true, y_pred, k=10)
-    return val
-
-batch_size = 32
+batch_size = 64
 
 # --- Dataset Creation ---
 dataset_generator = create_dataset(
@@ -35,13 +25,13 @@ training_dataset = tf.data.Dataset.from_generator(
     dataset_generator["training"]["feeder"].__iter__,
     (tf.float32, tf.float32, tf.float32),
     (tf.TensorShape([19, 19, 17]), tf.TensorShape([362]), tf.TensorShape([]))
-).batch(batch_size)
+).shuffle(1000).batch(batch_size)
 
 validation_dataset = tf.data.Dataset.from_generator(
     dataset_generator["validation"]["feeder"].__iter__,
     (tf.float32, tf.float32, tf.float32),
     (tf.TensorShape([19, 19, 17]), tf.TensorShape([362]), tf.TensorShape([]))
-).batch(batch_size)
+).batch(batch_size).prefetch(100)
 
 test_dataset = tf.data.Dataset.from_generator(
     dataset_generator["test"]["feeder"].__iter__,
@@ -58,16 +48,18 @@ train_init_op = iterator.make_initializer(training_dataset)
 validation_init_op = iterator.make_initializer(validation_dataset)
 test_init_op = iterator.make_initializer(test_dataset)
 
+
 # --- Model Creation ---
+def moves_predicted(y_true, y_pred):
+    val = categorical_accuracy(y_true, y_pred)
+    return val
 
-"""
-model = keras.Model(input_tensor, AlphaZero(input_tensor))
-"""
+
+def moves_top10(y_true, y_pred):
+    val = top_k_categorical_accuracy(y_true, y_pred, k=10)
+    return val
+
 input_vals = keras.layers.Input(tensor=example)
-
-#output1 = keras.layers.Dense(362, activation='sigmoid', name="out1")(mid)
-#output2 = keras.layers.Dense(1, activation='relu', name="out2")(mid)
-#model = keras.Model(input_vals, [output1, output2])
 model = AlphaZero(input_vals, residual_blocks=2)
 model.compile(
     adam(),
@@ -90,15 +82,27 @@ model.compile(
 )
 
 # --- Training ---
-for epochs in range(5):
+combined_loss = list()
+correct_moves = list()
+top10_moves = list()
+
+for epochs in range(3):
     session.run(train_init_op)
     model.fit(
         epochs=1,
-        steps_per_epoch=100
+        steps_per_epoch=1000
     )
 
     session.run(validation_init_op)
     result = model.evaluate(steps=100)
+    combined_loss.append(result[0])
+    correct_moves(result[3])
+    top10_moves(result[4])
+
+    model.save(str(Path("models/model-%d-epochs.hdf5" % epochs)))
+    np.save(str("models/loss.npy"), np.array(combined_loss))
+    np.save(str("models/correct_moves.npy"), np.array(correct_moves))
+    np.save(str("models/top10_moves.npy"), np.array(top10_moves))
 
 session.run(test_init_op)
 result = model.evaluate(steps=100)
