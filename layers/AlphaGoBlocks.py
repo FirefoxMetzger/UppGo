@@ -21,9 +21,9 @@ class ConvNorm(Block):
                    data_format=data_format,
                    kernel_regularizer=l2(c),
                    bias_regularizer=l2(c)
-            ),
+                   ),
             BatchNormalization(axis=3, scale=False)
-        ]   
+        ]
 
 
 class Conv(Block):
@@ -86,14 +86,15 @@ class Residual(Block):
 
 
 class ResidualTower(Block):
-    def __init__(self, input_size, layers, **kwargs):
+    def __init__(self, input_size, layers, c=1e-4, **kwargs):
         super(ResidualTower, self).__init__(**kwargs)
 
-        self.layers = [Residual(input_size) for _ in range(layers)]
+        self.layers = [Residual(input_size, c=c, **kwargs)
+                       for _ in range(layers)]
 
 
 class ValueHead(Block):
-    def __init__(self, **kwargs):
+    def __init__(self, c=1e-4, **kwargs):
         super(ValueHead, self).__init__(**kwargs)
 
         self.layers = [
@@ -101,12 +102,12 @@ class ValueHead(Block):
             Activation("relu"),
             Flatten(),
             Dense(256,
-                  bias_regularizer=l2(1e-4),
-                  kernel_regularizer=l2(1e-4)),
+                  bias_regularizer=l2(c),
+                  kernel_regularizer=l2(c)),
             Activation("relu"),
             Dense(1,
-                  bias_regularizer=l2(1e-4),
-                  kernel_regularizer=l2(1e-4)),
+                  bias_regularizer=l2(c),
+                  kernel_regularizer=l2(c)),
             Activation("tanh")
         ]
 

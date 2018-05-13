@@ -1,5 +1,4 @@
 from keras.losses import mean_squared_error, categorical_crossentropy
-from keras.optimizers import adam
 from keras.metrics import categorical_accuracy, top_k_categorical_accuracy
 from keras.callbacks import ModelCheckpoint
 from pathlib import Path
@@ -9,7 +8,11 @@ from network import AlphaZero
 from load_data import create_dataset, ReplayQueue
 
 import tensorflow as tf
+import numpy as np
 
+jit_scope = tf.contrib.compiler.jit.experimental_jit_scope
+options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+run_metadata = tf.RunMetadata()
 session = tf.Session()
 keras.backend.set_session(session)
 
@@ -60,9 +63,9 @@ def moves_top10(y_true, y_pred):
     return val
 
 input_vals = keras.layers.Input(tensor=example)
-model = AlphaZero(input_vals, residual_blocks=2)
+model = AlphaZero(input_vals, residual_blocks=2, c=0.5)
 model.compile(
-    adam(),
+    keras.optimizers.sgd(lr=0.01, momentum=.9, nesterov=True),
     loss={
         "policy": categorical_crossentropy,
         "value": mean_squared_error
@@ -90,14 +93,14 @@ for epochs in range(3):
     session.run(train_init_op)
     model.fit(
         epochs=1,
-        steps_per_epoch=1000
+        steps_per_epoch=5231
     )
 
     session.run(validation_init_op)
-    result = model.evaluate(steps=100)
+    result = model.evaluate(steps=270)
     combined_loss.append(result[0])
-    correct_moves(result[3])
-    top10_moves(result[4])
+    correct_moves.append(result[3])
+    top10_moves.append(result[4])
 
     model.save(str(Path("models/model-%d-epochs.hdf5" % epochs)))
     np.save(str("models/loss.npy"), np.array(combined_loss))
@@ -105,7 +108,7 @@ for epochs in range(3):
     np.save(str("models/top10_moves.npy"), np.array(top10_moves))
 
 session.run(test_init_op)
-result = model.evaluate(steps=100)
+result = model.evaluate(steps=1000)
 
 print(result)
 

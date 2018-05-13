@@ -13,11 +13,11 @@ import keras
 # last 8 board states for opposite player
 # 1 filled with current player (1=black, 0=white)
 # regularization is c = 0.0001
-def AlphaZero(input_tensor, residual_blocks=10):
-    x = Conv()(input_tensor)
-    x = ResidualTower(256, residual_blocks)(x)
-    value = ValueHead(name="value")(x)
-    policy = PolicyHead(name="policy")(x)
+def AlphaZero(input_tensor, residual_blocks=10, c=1e-2):
+    x = Conv(c=c)(input_tensor)
+    x = ResidualTower(256, residual_blocks, c=c)(x)
+    value = ValueHead(name="value", c=c)(x)
+    policy = PolicyHead(name="policy", c=c)(x)
 
     return Model(input_tensor, [policy, value])
 
